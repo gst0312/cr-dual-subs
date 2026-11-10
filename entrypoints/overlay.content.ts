@@ -1,4 +1,4 @@
-import { parseSubtitle } from '@/lib/parse';
+import { assDialogueFont, parseSubtitle, type AssFont } from '@/lib/parse';
 import { DEFAULTS, loadSettings, onSettingsChanged, type Settings } from '@/lib/settings';
 import { CONTENT_SOURCE, MAIN_SOURCE, type Cue, type Track, type TrackList } from '@/lib/types';
 
@@ -74,8 +74,11 @@ export default defineContentScript({
       if (requestKey === currentKey) return;
       currentKey = requestKey;
       try {
-        const parsed = parseSubtitle(await fetchInPage(track.url));
+        const body = await fetchInPage(track.url);
+        const parsed = parseSubtitle(body);
         if (requestKey !== currentKey) return;
+        // The frame that holds the video may be another one: relay the font.
+        void broadcast({ type: 'font', font: assDialogueFont(body) });
         if (!parsed.length) {
           void broadcast({ type: 'status', text: '双语字幕：字幕轨里没有找到对白' });
           return;
@@ -86,6 +89,8 @@ export default defineContentScript({
           cues: parsed,
           sl: track.locale,
           tl: settings.targetLang,
+          audioLocale: lastTracks.audioLocale,
+          time: findVideo()?.currentTime ?? 0,
         });
       } catch (e) {
         currentKey = '';
@@ -94,16 +99,13 @@ export default defineContentScript({
     }
 
     // ---- messages from the background (reach every frame) ----------------
-    let activeKey = '';
     browser.runtime.onMessage.addListener((msg: any) => {
       if (!msg) return;
       if (msg.type === 'cues') {
-        const fresh = msg.key !== activeKey;
-        activeKey = msg.key;
         cues = msg.cues as Cue[];
-        if (msg.state === 'error') showStatus(`双语字幕：翻译失败（${msg.error}）`);
-        else if (msg.state === 'done') showStatus('双语字幕：翻译完成');
-        else if (fresh) showStatus('双语字幕：翻译中…');
+        if (msg.status) showStatus(msg.status);
+      } else if (msg.type === 'font') {
+        playerFont = (msg.font as AssFont | null) ?? PLAYER_FONT;
       } else if (msg.type === 'status') {
         showStatus(msg.text);
       }
@@ -119,20 +121,62 @@ export default defineContentScript({
     let shownOrig = '';
     let shownTr = '';
 
-    const SHADOW =
-      '0 0 4px #000, 0 0 4px #000, 2px 2px 3px #000, -1px -1px 2px #000, 1px -1px 2px #000, -1px 1px 2px #000';
+    // What Crunchyroll's own renderer sets dialogue in. The real value is read
+    // from the subtitle file's styles; this is the usual one, used until then
+    // and for tracks that carry no styles (WebVTT).
+    const PLAYER_FONT: AssFont = { font: 'Trebuchet MS', bold: true };
+    let playerFont = PLAYER_FONT;
+    const isCjk = (lang: string) => /^(zh|ja|ko)\b/i.test(lang);
+
+    // Each stack pairs a Latin face with a CJK face of the same character, so
+    // the two lines (and digits inside the CJK line) look like one typeface:
+    // grotesque + hei, geometric + rounded, Charter/Times + song (similar stroke
+    // contrast), Palatino + kai (both calligraphic). Windows faces follow the
+    // macOS ones in each stack.
+    const FONTS: Record<Settings['fontFamily'], string> = {
+      hei: `"Helvetica Neue", "Segoe UI", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif`,
+      yuan: `"Avenir Next", "Segoe UI", Arial, "Yuanti SC", YouYuan, "PingFang SC", "Microsoft YaHei", sans-serif`,
+      song: `Charter, "Times New Roman", Times, "Songti SC", "Noto Serif CJK SC", SimSun, serif`,
+      kai: `Palatino, "Palatino Linotype", "Book Antiqua", "Kaiti SC", STKaiti, KaiTi, serif`,
+      hand: `"Hannotate SC", "Kaiti SC", STKaiti, KaiTi, sans-serif`,
+    };
+    // Pastel translation colours over a white original line. The outline takes
+    // a very dark shade of the same hue, which reads softer than pure black.
+    const THEMES: Record<Settings['trColor'], { tr: string; orig: string; edge: string }> = {
+      white: { tr: '#ffffff', orig: '#dde1e7', edge: '10,12,20' },
+      cream: { tr: '#fff2cf', orig: '#ffffff', edge: '20,14,6' },
+      yellow: { tr: '#ffd97a', orig: '#f6f3ec', edge: '24,16,4' },
+      sky: { tr: '#c4e8ff', orig: '#ffffff', edge: '6,14,28' },
+      mint: { tr: '#c8f7dc', orig: '#ffffff', edge: '6,20,14' },
+      sakura: { tr: '#ffd6e4', orig: '#ffffff', edge: '28,8,16' },
+    };
+
+    /**
+     * Per-script metrics. CJK glyphs fill the em box and want air between
+     * them; Latin text is already spaced by its sidebearings and sets tighter.
+     * `lang` also makes the browser pick the right regional glyph variants.
+     */
+    function styleLine(el: HTMLElement, lang: string) {
+      if (el.lang === lang) return;
+      el.lang = lang;
+      const cjk = isCjk(lang);
+      el.style.letterSpacing = cjk ? '.05em' : '.01em';
+      el.style.lineHeight = cjk ? '1.3' : '1.22';
+    }
 
     function ensureElements(host: Element) {
       if (!box) {
         box = document.createElement('div');
         box.style.cssText =
           'position:fixed;z-index:2147483647;pointer-events:none;text-align:center;' +
-          'font-family:"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",Arial,sans-serif;' +
-          `font-weight:600;line-height:1.3;text-shadow:${SHADOW};white-space:pre-line;`;
+          'font-weight:500;white-space:pre-line;font-kerning:normal;' +
+          // Wrapped lines break into even lengths instead of leaving one orphan word.
+          'text-wrap:balance;' +
+          // The outline is drawn behind the glyphs; its colour comes from the theme.
+          'paint-order:stroke fill;stroke-linejoin:round;-webkit-font-smoothing:antialiased;';
         origEl = document.createElement('div');
-        origEl.style.color = '#fff';
+        origEl.style.cssText = 'margin-bottom:.16em;';
         trEl = document.createElement('div');
-        trEl.style.color = '#ffe66d';
         box.append(origEl, trEl);
 
         statusEl = document.createElement('div');
@@ -197,10 +241,33 @@ export default defineContentScript({
 
       const size = Math.max(12, r.height * 0.042 * (settings.fontSize / 100));
       box!.style.display = 'block';
-      box!.style.left = `${r.left + r.width * 0.05}px`;
-      box!.style.width = `${r.width * 0.9}px`;
+      box!.style.left = `${r.left + r.width * 0.07}px`;
+      box!.style.width = `${r.width * 0.86}px`;
       box!.style.bottom = `${window.innerHeight - r.bottom + r.height * (settings.bottomOffset / 100)}px`;
-      origEl!.style.fontSize = `${size * 0.85}px`;
+      const stack = FONTS[settings.fontFamily] ?? FONTS.hei;
+      // The original line keeps the player's own typeface and weight. With the
+      // sans stack the translation shares that Latin face (digits, names) and
+      // goes semibold, so both lines carry the same visual weight.
+      const latin = isCjk(settings.sourceLang) ? '' : `"${playerFont.font}", "Trebuchet MS", `;
+      const sans = settings.fontFamily === 'hei';
+      box!.style.fontFamily = stack;
+      origEl!.style.fontFamily = latin + stack;
+      origEl!.style.fontWeight = latin && playerFont.bold ? '700' : '500';
+      trEl!.style.fontFamily = sans ? latin + stack : stack;
+      trEl!.style.fontWeight = sans && latin && playerFont.bold ? '600' : '500';
+      styleLine(origEl!, settings.sourceLang);
+      styleLine(trEl!, settings.targetLang);
+      // An empty line must not leave its margin behind.
+      origEl!.style.display = orig ? 'block' : 'none';
+      trEl!.style.display = tr ? 'block' : 'none';
+      const theme = THEMES[settings.trColor] ?? THEMES.mint;
+      // A crisp outline plus a tight halo and a soft drop shadow, so the text
+      // holds up on bright scenes too.
+      box!.style.webkitTextStroke = `.16em rgba(${theme.edge},.9)`;
+      box!.style.textShadow = `0 0 .12em rgba(${theme.edge},.85),0 .07em .22em rgba(${theme.edge},.6)`;
+      origEl!.style.color = theme.orig;
+      trEl!.style.color = theme.tr;
+      origEl!.style.fontSize = `${size * 0.8}px`;
       trEl!.style.fontSize = `${size}px`;
     }
 
@@ -209,11 +276,24 @@ export default defineContentScript({
       settings = s;
       void startEpisode();
     });
+    const restart = () => {
+      currentKey = '';
+      void startEpisode();
+    };
     onSettingsChanged((s) => {
-      const retranslate = s.targetLang !== settings.targetLang || s.sourceLang !== settings.sourceLang;
+      const retranslate =
+        s.targetLang !== settings.targetLang ||
+        s.sourceLang !== settings.sourceLang ||
+        s.engine !== settings.engine ||
+        s.model !== settings.model ||
+        s.nameStyle !== settings.nameStyle;
       const reenabled = s.enabled && !settings.enabled;
       settings = s;
-      if (retranslate || reenabled) void startEpisode();
+      if (retranslate || reenabled) restart();
+    });
+    // A newly entered API key upgrades the current episode right away.
+    browser.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && 'anthropicApiKey' in changes) restart();
     });
     setInterval(tick, 100);
   },

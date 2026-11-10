@@ -56,9 +56,58 @@
         <option value="en">English</option>
       </select>
     </label>
+    <label>
+      翻译方式
+      <select id="engine">
+        <option value="claude-code">本机 Claude Code（用订阅）</option>
+        <option value="api">Claude API（用 key）</option>
+        <option value="machine">只用机翻</option>
+      </select>
+    </label>
+    <label>
+      Claude API key
+      <input id="apiKey" type="password" placeholder="sk-ant-…" autocomplete="off" style="width: 140px" />
+    </label>
+    <label>
+      模型
+      <select id="model">
+        <option value="claude-opus-5-5">Opus 5.5（质量最好）</option>
+        <option value="claude-sonnet-5-5">Sonnet 5.5（更便宜）</option>
+      </select>
+    </label>
+    <label>
+      译名习惯
+      <select id="nameStyle">
+        <option value="mainland">大陆（贝吉塔）</option>
+        <option value="taiwan">台湾（達爾）</option>
+        <option value="hongkong">香港（比達）</option>
+      </select>
+    </label>
     <label>显示原文 <input id="showOriginal" type="checkbox" /></label>
+    <label>
+      字体
+      <select id="fontFamily">
+        <option value="hei">黑体（苹方）</option>
+        <option value="yuan">圆体</option>
+        <option value="song">宋体</option>
+        <option value="kai">楷体</option>
+        <option value="hand">手写（手札体）</option>
+      </select>
+    </label>
+    <label>
+      译文颜色
+      <select id="trColor">
+        <option value="mint">薄荷绿</option>
+        <option value="cream">暖白</option>
+        <option value="white">纯白</option>
+        <option value="yellow">琥珀黄</option>
+        <option value="sky">天蓝</option>
+        <option value="sakura">樱花粉</option>
+      </select>
+    </label>
     <label>字号 <input id="fontSize" type="range" min="60" max="180" step="5" /></label>
     <label>离底部距离 <input id="bottomOffset" type="range" min="0" max="40" step="1" /></label>
+    <p>“本机 Claude Code”需要先在项目目录运行 <code>npm run bridge</code>。API key 只在选“Claude API”时使用，只保存在本机。</p>
     <p>开着“显示原文”时，请在 Crunchyroll 播放器里把自带字幕关掉，避免两套字幕重叠。</p>
     <script type="module" src="./main.ts"></script>
   </body>

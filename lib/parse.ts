@@ -92,6 +92,65 @@ export function parseAss(input: string): Cue[] {
   return finish(cues);
 }
 
+export interface AssFont {
+  font: string;
+  bold: boolean;
+}
+
+/**
+ * The typeface of the style that carries most of the dialogue in an ASS file,
+ * so the overlay can set the original line the way the player itself would.
+ * Returns null for other formats or when no usable style is found.
+ */
+export function assDialogueFont(input: string): AssFont | null {
+  const styles = new Map<string, AssFont>();
+  const uses = new Map<string, number>();
+  let section = '';
+  let format: string[] = [];
+  for (const raw of input.replace(/\r/g, '').split('\n')) {
+    const line = raw.trim();
+    if (line.startsWith('[')) {
+      section = /styles\]/i.test(line) ? 'styles' : /^\[events\]/i.test(line) ? 'events' : '';
+      format = [];
+      continue;
+    }
+    if (/^format:/i.test(line)) {
+      format = line
+        .slice(7)
+        .split(',')
+        .map((f) => f.trim().toLowerCase());
+      continue;
+    }
+    if (!format.length) continue;
+    if (section === 'styles' && /^style:/i.test(line)) {
+      const f = line.slice(6).split(',');
+      const name = f[format.indexOf('name')]?.trim();
+      const font = f[format.indexOf('fontname')]?.trim().replace(/^@/, '');
+      const bold = f[format.indexOf('bold')]?.trim();
+      // Only plain family names: this ends up inside a CSS font-family value.
+      if (name && font && /^[\p{L}\p{N} ._-]+$/u.test(font)) {
+        styles.set(name, { font, bold: !!bold && bold !== '0' });
+      }
+    } else if (section === 'events' && /^dialogue:/i.test(line)) {
+      const f = line.slice(9).split(',');
+      const text = f.slice(format.indexOf('text')).join(',');
+      if (/\\p[1-9]/.test(text) || /\\(pos|move)\s*\(/.test(text)) continue;
+      const name = f[format.indexOf('style')]?.trim().replace(/^\*/, '') ?? '';
+      uses.set(name, (uses.get(name) ?? 0) + 1);
+    }
+  }
+  let best: AssFont | null = null;
+  let bestUses = 0;
+  for (const [name, n] of uses) {
+    const style = styles.get(name);
+    if (style && n > bestUses) {
+      best = style;
+      bestUses = n;
+    }
+  }
+  return best;
+}
+
 function finish(cues: Cue[]): Cue[] {
   cues.sort((a, b) => a.start - b.start || a.end - b.end);
   const out: Cue[] = [];
