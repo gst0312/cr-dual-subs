@@ -1,0 +1,19 @@
+{
+  "name": "cr-dual-subs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bilingual subtitles for Crunchyroll: shows a machine-translated line under the original subtitle.",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "typecheck": "wxt prepare && tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0",
+    "wxt": "^0.20.0"
+  }
+}

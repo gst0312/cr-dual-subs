@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Dual Subs</title>
+    <style>
+      body {
+        width: 280px;
+        margin: 0;
+        padding: 14px 16px;
+        font: 14px/1.5 -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        color: #1d1d1f;
+      }
+      h1 {
+        font-size: 15px;
+        margin: 0 0 10px;
+      }
+      label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 9px 0;
+      }
+      select,
+      input[type='range'] {
+        width: 140px;
+      }
+      p {
+        margin: 12px 0 0;
+        font-size: 12px;
+        color: #6e6e73;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Crunchyroll 双语字幕</h1>
+    <label>启用 <input id="enabled" type="checkbox" /></label>
+    <label>
+      原字幕语言
+      <select id="sourceLang">
+        <option value="en-US">English</option>
+        <option value="ja-JP">日本語</option>
+        <option value="es-419">Español (LatAm)</option>
+        <option value="fr-FR">Français</option>
+        <option value="de-DE">Deutsch</option>
+      </select>
+    </label>
+    <label>
+      翻译成
+      <select id="targetLang">
+        <option value="zh-CN">简体中文</option>
+        <option value="zh-TW">繁體中文</option>
+        <option value="ja">日本語</option>
+        <option value="ko">한국어</option>
+        <option value="en">English</option>
+      </select>
+    </label>
+    <label>显示原文 <input id="showOriginal" type="checkbox" /></label>
+    <label>字号 <input id="fontSize" type="range" min="60" max="180" step="5" /></label>
+    <label>离底部距离 <input id="bottomOffset" type="range" min="0" max="40" step="1" /></label>
+    <p>开着“显示原文”时，请在 Crunchyroll 播放器里把自带字幕关掉，避免两套字幕重叠。</p>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
